@@ -1,5 +1,34 @@
 // api/pow.js
-// Deploy to Vercel as a serverless function.
+// Corrected version with proper 32-bit unsigned arithmetic
+
+// ================================================================
+//  32-bit unsigned multiplication emulation
+//  PHP uses 64-bit integers; JavaScript bitwise ops are 32-bit.
+//  This function simulates PHP's 64-bit multiplication and then
+//  truncates to 32-bit unsigned.
+// ================================================================
+function mul32(a, b) {
+    // Split into 16-bit halves to avoid floating-point precision issues
+    const a1 = a & 0xFFFF;
+    const a2 = (a >>> 16) & 0xFFFF;
+    const b1 = b & 0xFFFF;
+    const b2 = (b >>> 16) & 0xFFFF;
+    
+    // Perform 64-bit multiplication using 32-bit chunks
+    let low = a1 * b1;
+    let mid = a1 * b2 + a2 * b1;
+    let high = a2 * b2;
+    
+    // Combine: result = low + (mid << 16) + (high << 32)
+    // But we only want the lower 32 bits
+    let result = (low + ((mid & 0xFFFF) << 16)) >>> 0;
+    // Add carry from mid's higher bits
+    result = (result + ((mid >>> 16) << 16)) >>> 0;
+    // Add high's contribution (but high << 32 is beyond 32 bits, so we only take its lower 16 bits shifted by 16)
+    result = (result + ((high & 0xFFFF) << 16)) >>> 0;
+    
+    return result;
+}
 
 // ================================================================
 //  ns_hash – exact translation of PHP's ns_hash()
@@ -9,7 +38,7 @@ function ns_hash(input) {
     const RS_AH = 40503, RS_AL = 31153;
     const TS_AH = 34283, TS_AL = 51831;
 
-    // Convert string to byte array (same as unpack('C*'))
+    // Convert string to byte array
     const data = [];
     for (let i = 0; i < input.length; i++) {
         data.push(input.charCodeAt(i));
@@ -81,8 +110,10 @@ function ns_hash(input) {
             const b = T[(s + 1) & 511] >>> 0;
             const bh = (b >>> 16) & 0xFFFF;
             const bl = b & 0xFFFF;
-            const mul = ((RS_AL * bl) + (((RS_AH * bl + RS_AL * bh) & 0xFFFF) << 16)) >>> 0;
-            d = (d ^ mul) >>> 0;
+            // --- CRITICAL FIX: use mul32() instead of raw multiplication ---
+            const mul = mul32(RS_AL, bl) + ((mul32(RS_AH, bl) + mul32(RS_AL, bh)) & 0xFFFF) * 65536;
+            const mulFinal = (mul & 0xFFFFFFFF) >>> 0;
+            d = (d ^ mulFinal) >>> 0;
             T[s] = d;
 
             r0 = (r0 ^ d) >>> 0;
@@ -124,8 +155,10 @@ function ns_hash(input) {
             sv = ((sv << 5) | (sv >>> 27)) >>> 0;
             const fh = (f >>> 16) & 0xFFFF;
             const fl = f & 0xFFFF;
-            const mul = ((TS_AL * fl) + (((TS_AH * fl + TS_AL * fh) & 0xFFFF) << 16)) >>> 0;
-            sv = (sv ^ mul) >>> 0;
+            // --- CRITICAL FIX: use mul32() here too ---
+            const mul = mul32(TS_AL, fl) + ((mul32(TS_AH, fl) + mul32(TS_AL, fh)) & 0xFFFF) * 65536;
+            const mulFinal = (mul & 0xFFFFFFFF) >>> 0;
+            sv = (sv ^ mulFinal) >>> 0;
         }
         result.push((sv ^ r2) >>> 0);
     }
@@ -172,7 +205,6 @@ function powSolve(nonce, difficulty, maxSeconds = 55) {
 
 // ---- Vercel handler ----
 export default async function handler(req, res) {
-    // Set CORS headers (allow all for simplicity)
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -184,7 +216,6 @@ export default async function handler(req, res) {
     // --- Handle GET request for testing ---
     if (req.method === 'GET') {
         if (req.query && req.query.test === '1') {
-            // Get nonce from query or use a fallback
             const nonce = req.query.nonce || '336a0283ab9ec4c9bc465782e28e8a78';
             const hash0 = ns_hash(nonce + ':0');
             const bits0 = os_bits(hash0);
@@ -219,5 +250,5 @@ export default async function handler(req, res) {
     }
 }
 
-// Set Vercel max duration (for Next.js; if not using Next.js, set in vercel.json)
+// Set Vercel max duration
 export const maxDuration = 60;

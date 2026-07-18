@@ -1,14 +1,11 @@
-// api/pow.js
-// SHA-256 PoW – keep it fast for when the server switches to SHA-256
-
+// api/pow.js – SHA-256 (keep it; may become useful later)
 import crypto from 'crypto';
 
 function leadingZeroBits(buffer) {
     let bits = 0;
     for (const byte of buffer) {
-        if (byte === 0) {
-            bits += 8;
-        } else {
+        if (byte === 0) bits += 8;
+        else {
             bits += 8 - Math.clz32(byte);
             break;
         }

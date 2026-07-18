@@ -172,34 +172,41 @@ function powSolve(nonce, difficulty, maxSeconds = 55) {
 
 // ---- Vercel handler ----
 export default async function handler(req, res) {
-    // Allow CORS for your PHP server
+    // Set CORS headers (allow all for simplicity)
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
-
-    try {
-        const { nonce, difficulty, timeout = 55 } = req.body;
-
-        // --- Debug mode: if test=1, return hash info for s=0 ---
-        if (req.query.test === '1') {
+    // --- Handle GET request for testing ---
+    if (req.method === 'GET') {
+        if (req.query && req.query.test === '1') {
+            // Get nonce from query or use a fallback
+            const nonce = req.query.nonce || '336a0283ab9ec4c9bc465782e28e8a78';
             const hash0 = ns_hash(nonce + ':0');
             const bits0 = os_bits(hash0);
             return res.status(200).json({
                 nonce,
                 hash0,
                 bits0,
-                message: `s=0 leading bits: ${bits0} (should be < difficulty for a valid nonce)`
+                message: `s=0 leading bits: ${bits0}. For a valid nonce, this should be < difficulty (usually 16-20).`
             });
         }
+        return res.status(400).json({ 
+            error: 'Use POST for solving, or GET with ?test=1&nonce=YOUR_NONCE for debugging.'
+        });
+    }
 
+    // --- Handle POST request for solving ---
+    if (req.method !== 'POST') {
+        return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    try {
+        const { nonce, difficulty, timeout = 55 } = req.body;
         if (!nonce || !difficulty) {
             return res.status(400).json({ error: 'Missing nonce or difficulty' });
         }
@@ -212,5 +219,5 @@ export default async function handler(req, res) {
     }
 }
 
-// Set max duration to 60 seconds (Vercel Pro) or 10s for Hobby (adjust accordingly)
+// Set Vercel max duration (for Next.js; if not using Next.js, set in vercel.json)
 export const maxDuration = 60;

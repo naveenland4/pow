@@ -1,5 +1,5 @@
 // api/pow.js
-// Vercel serverless function – SHA-256 PoW
+// SHA-256 PoW solver for Vercel (or any Node.js server)
 
 import crypto from 'crypto';
 

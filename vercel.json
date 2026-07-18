@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/pow.js": {
+      "maxDuration": 60
+    }
+  }
+}

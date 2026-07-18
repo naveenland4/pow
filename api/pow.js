@@ -1,11 +1,11 @@
 // api/pow.js
-// Works with Next.js (pages/api) or standalone Vercel function
 
 // === ns_hash – exact PHP translation ===
 function ns_hash(input) {
     const RS_AH = 40503, RS_AL = 31153;
     const TS_AH = 34283, TS_AL = 51831;
 
+    // Convert string to array of byte codes (same as unpack('C*'))
     const data = [];
     for (let i = 0; i < input.length; i++) {
         data.push(input.charCodeAt(i));
@@ -15,7 +15,7 @@ function ns_hash(input) {
     let r0 = 1779033703 >>> 0, r1 = 3144134277 >>> 0;
     let r2 = 1013904242 >>> 0, r3 = 2773480762 >>> 0;
 
-    // Primary round
+    // 1st loop: process input bytes
     for (let o = 0; o < len; o++) {
         r0 = (r0 + data[o]) >>> 0;
         r0 = ((r0 << 7) | (r0 >>> 25)) >>> 0;
@@ -49,7 +49,7 @@ function ns_hash(input) {
         r1 = ((v << 7) | (v >>> 25)) >>> 0;
     }
 
-    // Generate table T
+    // Generate 512‑element table T
     const T = new Array(512).fill(0);
     for (let o = 0; o < 512; o++) {
         r0 = (r0 + r1) >>> 0;
@@ -67,7 +67,7 @@ function ns_hash(input) {
         T[o] = (r0 ^ r2) >>> 0;
     }
 
-    // Two passes over T
+    // Two passes over T (with multiplications)
     for (let o = 0; o < 2; o++) {
         for (let s = 0; s < 512; s++) {
             const ts = T[s] >>> 0;
@@ -97,6 +97,7 @@ function ns_hash(input) {
         }
     }
 
+    // Final 8 rounds with T mixing
     const result = [];
     for (let o = 0; o < 8; o++) {
         r0 = (r0 + r1) >>> 0;
@@ -129,7 +130,7 @@ function ns_hash(input) {
 
 function os_bits(words) {
     let total = 0;
-    for (let w of words) {
+    for (const w of words) {
         if (w === 0) total += 32;
         else {
             // clz32
@@ -142,20 +143,30 @@ function os_bits(words) {
 function powSolve(nonce, difficulty, maxSeconds = 55) {
     const prefix = nonce + ':';
     const start = Date.now();
+    let lastLog = 0;
     for (let s = 0; s < 5000000; s++) {
-        if (s % 5000 === 0 && (Date.now() - start) > maxSeconds * 1000) {
+        // Log progress every 5 seconds (optional)
+        const now = Date.now();
+        if (now - lastLog > 5000) {
+            console.log(`PoW progress: ${s} iterations, ${(now - start)/1000}s`);
+            lastLog = now;
+        }
+        if (s > 0 && (now - start) > maxSeconds * 1000) {
+            console.log(`PoW timeout after ${s} iterations`);
             break;
         }
         const hash = ns_hash(prefix + s);
         const bits = os_bits(hash);
         if (bits >= difficulty) {
+            console.log(`PoW solved: s=${s}, bits=${bits}, time=${(now - start)/1000}s`);
             return String(s);
         }
     }
-    return null;
+    console.log(`PoW failed to find solution after ${(Date.now() - start)/1000}s`);
+    return null;  // explicit null
 }
 
-// --- Vercel handler ---
+// === Vercel handler ===
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
@@ -167,12 +178,18 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Missing nonce or difficulty' });
         }
 
+        // Optionally test s=0 to verify hash – you can remove this
+        const testHash = ns_hash(nonce + ':0');
+        const testBits = os_bits(testHash);
+        console.log(`ns_hash("${nonce}:0") leading bits = ${testBits}`);
+
         const solution = powSolve(nonce, difficulty, timeout);
         return res.status(200).json({ solution });
     } catch (e) {
+        console.error(e);
         return res.status(500).json({ error: e.message });
     }
 }
 
-// Set Vercel max duration (works for Next.js, not for plain functions – use vercel.json)
-export const maxDuration = 60; // seconds
+// Set Vercel max duration (for Next.js; if not using Next.js, set in vercel.json)
+export const maxDuration = 60;

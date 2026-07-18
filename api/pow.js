@@ -1,5 +1,5 @@
 // api/pow.js
-// SHA-256 PoW solver for Vercel (or any Node.js server)
+// SHA-256 PoW – keep it fast for when the server switches to SHA-256
 
 import crypto from 'crypto';
 
@@ -19,30 +19,15 @@ function leadingZeroBits(buffer) {
 function powSolve(nonce, difficulty, maxSeconds = 30) {
     const prefix = nonce + ':';
     const start = Date.now();
-    let lastLog = 0;
     for (let s = 0; s < 20000000; s++) {
-        const now = Date.now();
-        if (now - lastLog > 5000) {
-            console.log(`PoW progress: ${s} iter, ${(now - start)/1000}s`);
-            lastLog = now;
-        }
-        if (now - start > maxSeconds * 1000) {
-            console.log(`PoW timeout after ${s} iterations`);
-            break;
-        }
+        if (Date.now() - start > maxSeconds * 1000) break;
         const hash = crypto.createHash('sha256').update(prefix + s).digest();
-        const bits = leadingZeroBits(hash);
-        if (bits >= difficulty) {
-            console.log(`PoW solved: s=${s}, bits=${bits}, time=${(now - start)/1000}s`);
-            return String(s);
-        }
+        if (leadingZeroBits(hash) >= difficulty) return String(s);
     }
-    console.log(`PoW failed after ${(Date.now() - start)/1000}s`);
     return null;
 }
 
 export default async function handler(req, res) {
-    // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -69,5 +54,4 @@ export default async function handler(req, res) {
     }
 }
 
-// Vercel max duration (60 seconds)
 export const maxDuration = 60;

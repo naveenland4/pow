@@ -1,28 +1,130 @@
 // api/pow.js
+// Works with Next.js (pages/api) or standalone Vercel function
 
-// --- ns_hash translation (exact copy of PHP's logic) ---
+// === ns_hash – exact PHP translation ===
 function ns_hash(input) {
     const RS_AH = 40503, RS_AL = 31153;
     const TS_AH = 34283, TS_AL = 51831;
 
-    // Convert input string to array of char codes
     const data = [];
     for (let i = 0; i < input.length; i++) {
         data.push(input.charCodeAt(i));
     }
     const len = data.length;
 
-    let r0 = 1779033703, r1 = 3144134277;
-    let r2 = 1013904242, r3 = 2773480762;
+    let r0 = 1779033703 >>> 0, r1 = 3144134277 >>> 0;
+    let r2 = 1013904242 >>> 0, r3 = 2773480762 >>> 0;
 
-    // (Copy the entire ns_hash loop from your PHP version)
-    // I'll provide a concise version – make sure it's identical.
-    // For brevity, I'm not pasting the full 100+ lines here, but you can copy it from your PHP ns_hash,
-    // replacing PHP syntax with JS (use >>> 0 for unsigned 32-bit, etc.)
-    // I'll give you a complete working version in a separate snippet.
+    // Primary round
+    for (let o = 0; o < len; o++) {
+        r0 = (r0 + data[o]) >>> 0;
+        r0 = ((r0 << 7) | (r0 >>> 25)) >>> 0;
+        r0 = (r0 + r1) >>> 0;
+        let v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 16) | (v >>> 16)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 12) | (v >>> 20)) >>> 0;
+        r0 = (r0 + r1) >>> 0;
+        v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 8) | (v >>> 24)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 7) | (v >>> 25)) >>> 0;
+    }
 
-    // ... (full implementation)
-    return [ /* 8 integers */ ];
+    // 8 rounds
+    for (let o = 0; o < 8; o++) {
+        r0 = (r0 + r1) >>> 0;
+        let v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 16) | (v >>> 16)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 12) | (v >>> 20)) >>> 0;
+        r0 = (r0 + r1) >>> 0;
+        v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 8) | (v >>> 24)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 7) | (v >>> 25)) >>> 0;
+    }
+
+    // Generate table T
+    const T = new Array(512).fill(0);
+    for (let o = 0; o < 512; o++) {
+        r0 = (r0 + r1) >>> 0;
+        let v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 16) | (v >>> 16)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 12) | (v >>> 20)) >>> 0;
+        r0 = (r0 + r1) >>> 0;
+        v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 8) | (v >>> 24)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 7) | (v >>> 25)) >>> 0;
+        T[o] = (r0 ^ r2) >>> 0;
+    }
+
+    // Two passes over T
+    for (let o = 0; o < 2; o++) {
+        for (let s = 0; s < 512; s++) {
+            const ts = T[s] >>> 0;
+            const idx = ts & 511;
+            let d = (ts + T[idx]) >>> 0;
+            d = ((d << 13) | (d >>> 19)) >>> 0;
+            const b = T[(s + 1) & 511] >>> 0;
+            const bh = (b >>> 16) & 0xFFFF;
+            const bl = b & 0xFFFF;
+            const mul = ((RS_AL * bl) + (((RS_AH * bl + RS_AL * bh) & 0xFFFF) << 16)) >>> 0;
+            d = (d ^ mul) >>> 0;
+            T[s] = d;
+
+            r0 = (r0 ^ d) >>> 0;
+            r0 = (r0 + r1) >>> 0;
+            let v = (r3 ^ r0) >>> 0;
+            r3 = ((v << 16) | (v >>> 16)) >>> 0;
+            r2 = (r2 + r3) >>> 0;
+            v = (r1 ^ r2) >>> 0;
+            r1 = ((v << 12) | (v >>> 20)) >>> 0;
+            r0 = (r0 + r1) >>> 0;
+            v = (r3 ^ r0) >>> 0;
+            r3 = ((v << 8) | (v >>> 24)) >>> 0;
+            r2 = (r2 + r3) >>> 0;
+            v = (r1 ^ r2) >>> 0;
+            r1 = ((v << 7) | (v >>> 25)) >>> 0;
+        }
+    }
+
+    const result = [];
+    for (let o = 0; o < 8; o++) {
+        r0 = (r0 + r1) >>> 0;
+        let v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 16) | (v >>> 16)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 12) | (v >>> 20)) >>> 0;
+        r0 = (r0 + r1) >>> 0;
+        v = (r3 ^ r0) >>> 0;
+        r3 = ((v << 8) | (v >>> 24)) >>> 0;
+        r2 = (r2 + r3) >>> 0;
+        v = (r1 ^ r2) >>> 0;
+        r1 = ((v << 7) | (v >>> 25)) >>> 0;
+        let sv = r0 >>> 0;
+        const cb = o * 64;
+        for (let d = 0; d < 64; d++) {
+            const f = T[cb + d] >>> 0;
+            sv = (sv + f) >>> 0;
+            sv = ((sv << 5) | (sv >>> 27)) >>> 0;
+            const fh = (f >>> 16) & 0xFFFF;
+            const fl = f & 0xFFFF;
+            const mul = ((TS_AL * fl) + (((TS_AH * fl + TS_AL * fh) & 0xFFFF) << 16)) >>> 0;
+            sv = (sv ^ mul) >>> 0;
+        }
+        result.push((sv ^ r2) >>> 0);
+    }
+    return result;
 }
 
 function os_bits(words) {
@@ -55,7 +157,6 @@ function powSolve(nonce, difficulty, maxSeconds = 55) {
 
 // --- Vercel handler ---
 export default async function handler(req, res) {
-    // Only POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -72,3 +173,6 @@ export default async function handler(req, res) {
         return res.status(500).json({ error: e.message });
     }
 }
+
+// Set Vercel max duration (works for Next.js, not for plain functions – use vercel.json)
+export const maxDuration = 60; // seconds

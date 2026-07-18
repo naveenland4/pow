@@ -1,38 +1,8 @@
 // api/pow.js
-// Corrected version with proper 32-bit unsigned arithmetic
-
-// ================================================================
-//  32-bit unsigned multiplication emulation
-//  PHP uses 64-bit integers; JavaScript bitwise ops are 32-bit.
-//  This function simulates PHP's 64-bit multiplication and then
-//  truncates to 32-bit unsigned.
-// ================================================================
-function mul32(a, b) {
-    // Split into 16-bit halves to avoid floating-point precision issues
-    const a1 = a & 0xFFFF;
-    const a2 = (a >>> 16) & 0xFFFF;
-    const b1 = b & 0xFFFF;
-    const b2 = (b >>> 16) & 0xFFFF;
-    
-    // Perform 64-bit multiplication using 32-bit chunks
-    let low = a1 * b1;
-    let mid = a1 * b2 + a2 * b1;
-    let high = a2 * b2;
-    
-    // Combine: result = low + (mid << 16) + (high << 32)
-    // But we only want the lower 32 bits
-    let result = (low + ((mid & 0xFFFF) << 16)) >>> 0;
-    // Add carry from mid's higher bits
-    result = (result + ((mid >>> 16) << 16)) >>> 0;
-    // Add high's contribution (but high << 32 is beyond 32 bits, so we only take its lower 16 bits shifted by 16)
-    result = (result + ((high & 0xFFFF) << 16)) >>> 0;
-    
-    return result;
-}
+// Uses Math.imul() for correct 32-bit unsigned multiplication.
 
 // ================================================================
 //  ns_hash – exact translation of PHP's ns_hash()
-//  All operations use >>> 0 to enforce unsigned 32-bit integers.
 // ================================================================
 function ns_hash(input) {
     const RS_AH = 40503, RS_AL = 31153;
@@ -110,10 +80,12 @@ function ns_hash(input) {
             const b = T[(s + 1) & 511] >>> 0;
             const bh = (b >>> 16) & 0xFFFF;
             const bl = b & 0xFFFF;
-            // --- CRITICAL FIX: use mul32() instead of raw multiplication ---
-            const mul = mul32(RS_AL, bl) + ((mul32(RS_AH, bl) + mul32(RS_AL, bh)) & 0xFFFF) * 65536;
-            const mulFinal = (mul & 0xFFFFFFFF) >>> 0;
-            d = (d ^ mulFinal) >>> 0;
+            
+            // --- FIX: use Math.imul() for 32-bit multiplication ---
+            // PHP: (RS_AL * bl) + (((RS_AH * bl + RS_AL * bh) & 0xFFFF) << 16)
+            const mul = (Math.imul(RS_AL, bl) + ((Math.imul(RS_AH, bl) + Math.imul(RS_AL, bh)) & 0xFFFF) * 65536) >>> 0;
+            
+            d = (d ^ mul) >>> 0;
             T[s] = d;
 
             r0 = (r0 ^ d) >>> 0;
@@ -155,10 +127,11 @@ function ns_hash(input) {
             sv = ((sv << 5) | (sv >>> 27)) >>> 0;
             const fh = (f >>> 16) & 0xFFFF;
             const fl = f & 0xFFFF;
-            // --- CRITICAL FIX: use mul32() here too ---
-            const mul = mul32(TS_AL, fl) + ((mul32(TS_AH, fl) + mul32(TS_AL, fh)) & 0xFFFF) * 65536;
-            const mulFinal = (mul & 0xFFFFFFFF) >>> 0;
-            sv = (sv ^ mulFinal) >>> 0;
+            
+            // --- FIX: use Math.imul() here too ---
+            const mul = (Math.imul(TS_AL, fl) + ((Math.imul(TS_AH, fl) + Math.imul(TS_AL, fh)) & 0xFFFF) * 65536) >>> 0;
+            
+            sv = (sv ^ mul) >>> 0;
         }
         result.push((sv ^ r2) >>> 0);
     }
